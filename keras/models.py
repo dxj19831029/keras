@@ -222,6 +222,7 @@ class Model(object):
                     if do_validation:
                         # replace with self._evaluate
                         val_outs = self._test_loop(val_f, val_ins, batch_size=batch_size, verbose=0)
+                        
                         if type(val_outs) != list:
                             val_outs = [val_outs]
                         # same labels assumed
@@ -281,8 +282,15 @@ class Model(object):
             if type(batch_outs) == list:
                 if batch_index == 0:
                     for batch_out in enumerate(batch_outs):
+                        if type(batch_out[1]) == np.ndarray and batch_out[1].shape != (1) and batch_out[1].shape != ():
+                            outs.append([])
+                            continue
                         outs.append(0.)
+                
                 for i, batch_out in enumerate(batch_outs):
+                    if type(batch_out) == np.ndarray and batch_out.shape != (1) and batch_out.shape != ():    
+                        outs[i].extend(batch_out)
+                        continue
                     outs[i] += batch_out * len(batch_ids)
             else:
                 if batch_index == 0:
@@ -292,6 +300,8 @@ class Model(object):
             if verbose == 1:
                 progbar.update(batch_end)
         for i, out in enumerate(outs):
+            if type(out) == list:
+              continue
             outs[i] /= nb_sample
         return outs
 
@@ -398,7 +408,8 @@ class Sequential(Model, containers.Sequential):
         more_func_train = None
         more_func_test = None
         self._more_output_labels = None
-        more_func_train = [T.abs_(self.optimizer.lr * (1.0 / (1.0 + self.optimizer.decay * self.optimizer.iterations)))]            
+        more_func_train = [T.abs_(self.optimizer.lr * (1.0 / (1.0 + self.optimizer.decay * self.optimizer.iterations)))]
+        more_func_test = [T.abs_(self.optimizer.lr * (1.0 / (1.0 + self.optimizer.decay * self.optimizer.iterations)))]             
         self._more_output_labels = ['lr']
         
         if other_func_init is not None:
@@ -406,7 +417,10 @@ class Sequential(Model, containers.Sequential):
             more_func_train.extend(other_func_init(self.y_train, self.y))
           else:
             more_func_train = other_func_init(self.y_train, self.y)
-          more_func_test = other_func_init(self.y_test, self.y)
+          if more_func_test is not None:
+            more_func_test.extend(other_func_init(self.y_test, self.y))
+          else:
+            more_func_test = other_func_init(self.y_test, self.y)
           if self._more_output_labels is None:
             self._more_output_labels = []
           for i in range(0, len(more_func_train)):
