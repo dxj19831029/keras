@@ -397,11 +397,18 @@ class Sequential(Model, containers.Sequential):
 
         more_func_train = None
         more_func_test = None
-        self._more_output_labels = None            
+        self._more_output_labels = None
+        more_func_train = [T.abs_(self.optimizer.lr * (1.0 / (1.0 + self.optimizer.decay * self.optimizer.iterations)))]            
+        self._more_output_labels = ['lr']
+        
         if other_func_init is not None:
-          more_func_train = other_func_init(self.y_train, self.y)
+          if more_func_train is not None:
+            more_func_train.extend(other_func_init(self.y_train, self.y))
+          else:
+            more_func_train = other_func_init(self.y_train, self.y)
           more_func_test = other_func_init(self.y_test, self.y)
-          self._more_output_labels = []
+          if self._more_output_labels is None:
+            self._more_output_labels = []
           for i in range(0, len(more_func_train)):
             self._more_output_labels.append("more_func_%d" % i)
 
@@ -516,7 +523,7 @@ class Sequential(Model, containers.Sequential):
 
         sample_weight = standardize_weights(y, class_weight=class_weight, sample_weight=sample_weight)
         ins = X + [y, sample_weight]
-        metrics = ['loss', 'acc', 'val_loss', 'val_acc']
+        metrics = ['loss', 'acc', 'lr', 'val_loss', 'val_acc']
         return self._fit(f, ins, out_labels=out_labels, batch_size=batch_size, nb_epoch=nb_epoch,
                          verbose=verbose, callbacks=callbacks,
                          val_f=val_f, val_ins=val_ins,
