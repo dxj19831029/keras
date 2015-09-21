@@ -341,7 +341,7 @@ class Sequential(Model, containers.Sequential):
             - set_weights
     '''
 
-    def compile(self, optimizer, loss, class_mode="categorical", theano_mode=None):
+    def compile(self, optimizer, loss, class_mode="categorical", theano_mode=None, other_func_init=None):
         self.optimizer = optimizers.get(optimizer)
 
         self.loss = objectives.get(loss)
@@ -373,7 +373,6 @@ class Sequential(Model, containers.Sequential):
         if class_mode == "categorical":
             train_accuracy = T.mean(T.eq(T.argmax(self.y, axis=-1), T.argmax(self.y_train, axis=-1)))
             test_accuracy = T.mean(T.eq(T.argmax(self.y, axis=-1), T.argmax(self.y_test, axis=-1)))
-
         elif class_mode == "binary":
             train_accuracy = T.mean(T.eq(self.y, T.round(self.y_train)))
             test_accuracy = T.mean(T.eq(self.y, T.round(self.y_test)))
@@ -396,16 +395,47 @@ class Sequential(Model, containers.Sequential):
             test_ins = [self.X_test, self.y, self.weights]
             predict_ins = [self.X_test]
 
-        self._train = theano.function(train_ins, train_loss, updates=updates,
-                                      allow_input_downcast=True, mode=theano_mode)
-        self._train_with_acc = theano.function(train_ins, [train_loss, train_accuracy], updates=updates,
-                                               allow_input_downcast=True, mode=theano_mode)
+        more_func_train = None
+        more_func_test = None
+        self._more_output_labels = None            
+        if other_func_init is not None:
+          more_func_train = other_func_init(self.y_train, self.y)
+          more_func_test = other_func_init(self.y_test, self.y)
+          self._more_output_labels = []
+          for i in range(0, len(more_func_train)):
+            self._more_output_labels.append("more_func_%d" % i)
+
+        if more_func_train is not None:
+          if type(more_func_train) is not list:
+            print("come to not list")
+            more_func_train = [more_func_train]
+            
+          self._train = theano.function(train_ins, [train_loss] + more_func_train, updates=updates,
+                                        allow_input_downcast=True, mode=theano_mode)
+          
+          self._train_with_acc = theano.function(train_ins, [train_loss, train_accuracy] + more_func_train, updates=updates,
+                                                 allow_input_downcast=True, mode=theano_mode)
+        else:
+          self._train = theano.function(train_ins, train_loss, updates=updates,
+                                        allow_input_downcast=True, mode=theano_mode)
+          self._train_with_acc = theano.function(train_ins, [train_loss, train_accuracy], updates=updates,
+                                                 allow_input_downcast=True, mode=theano_mode)
+          
         self._predict = theano.function(predict_ins, self.y_test,
                                         allow_input_downcast=True, mode=theano_mode)
-        self._test = theano.function(test_ins, test_loss,
-                                     allow_input_downcast=True, mode=theano_mode)
-        self._test_with_acc = theano.function(test_ins, [test_loss, test_accuracy],
-                                              allow_input_downcast=True, mode=theano_mode)
+        if more_func_test is not None:
+          if type(more_func_test) is not list:
+            more_func_test = [more_func_test] 
+            
+          self._test = theano.function(test_ins, [ test_loss ] + more_func_test,
+                                       allow_input_downcast=True, mode=theano_mode)
+          self._test_with_acc = theano.function(test_ins, [test_loss, test_accuracy] + more_func_test,
+                                                allow_input_downcast=True, mode=theano_mode)
+        else:
+          self._test = theano.function(test_ins, test_loss,
+                                       allow_input_downcast=True, mode=theano_mode)
+          self._test_with_acc = theano.function(test_ins, [test_loss, test_accuracy],
+                                                allow_input_downcast=True, mode=theano_mode)
 
     def train_on_batch(self, X, y, accuracy=False, class_weight=None, sample_weight=None):
         X = standardize_X(X)
@@ -480,6 +510,9 @@ class Sequential(Model, containers.Sequential):
         else:
             f = self._train
             out_labels = ['loss']
+            
+        if self._more_output_labels is not None:
+            out_labels += self._more_output_labels
 
         sample_weight = standardize_weights(y, class_weight=class_weight, sample_weight=sample_weight)
         ins = X + [y, sample_weight]
