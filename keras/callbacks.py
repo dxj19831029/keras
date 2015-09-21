@@ -118,7 +118,7 @@ class BaseLogger(Callback):
         self.seen += batch_size
 
         for k, v in logs.items():
-            if type(v) == np.ndarray and v.shape != (1):
+            if type(v) == np.ndarray and v.shape != (1) and v.shape != ():
               continue
             if k in self.totals:
                 self.totals[k] += v * batch_size
@@ -156,7 +156,7 @@ class History(Callback):
         batch_size = logs.get('size', 0)
         self.seen += batch_size
         for k, v in logs.items():
-            if type(v) == np.ndarray and v.shape != (1):
+            if type(v) == np.ndarray and v.shape != (1) and v.shape != ():
               continue
             if k in self.totals:
                 self.totals[k] += v * batch_size
