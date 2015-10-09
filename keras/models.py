@@ -622,7 +622,7 @@ class Sequential(Model, containers.Sequential):
 
 
 class Graph(Model, containers.Graph):
-    def compile(self, optimizer, loss, theano_mode=None):
+    def compile(self, optimizer, loss, theano_mode=None, other_func_init=None):
         # loss is a dictionary mapping output name to loss functions
         ys = []
         ys_train = []
@@ -665,10 +665,48 @@ class Graph(Model, containers.Graph):
         updates += self.updates
         self.theano_mode = theano_mode
         self.loss = loss
+        
+        more_func_train = None
+        more_func_test = None
+        self._more_output_labels = None
+        more_func_train = [T.abs_(self.optimizer.lr * (1.0 / (1.0 + self.optimizer.decay * self.optimizer.iterations)))]
+        more_func_test = [T.abs_(self.optimizer.lr * (1.0 / (1.0 + self.optimizer.decay * self.optimizer.iterations)))]             
+        self._more_output_labels = ['lr']
+        
+        if other_func_init is not None:
+          if more_func_train is not None:
+            more_func_train.extend(other_func_init(ys_train, ys))
+          else:
+            more_func_train = other_func_init(ys_train, ys)
+          if more_func_test is not None:
+            more_func_test.extend(other_func_init(ys_train, ys))
+          else:
+            more_func_test = other_func_init(ys_train, ys)
+          if self._more_output_labels is None:
+            self._more_output_labels = []
+          for i in range(0, len(more_func_train)):
+            self._more_output_labels.append("more_func_%d" % i)
 
-        self._train = theano.function(train_ins, train_loss, updates=updates,
+
+        if more_func_train is not None:
+          if type(more_func_train) is not list:
+            print("come to not list")
+            more_func_train = [more_func_train]
+            
+          self._train = theano.function(train_ins, [train_loss]+more_func_train, updates=updates,
                                       allow_input_downcast=True, mode=theano_mode)
-        self._test = theano.function(test_ins, test_loss,
+        else:
+          self._train = theano.function(train_ins, train_loss, updates=updates,
+                                      allow_input_downcast=True, mode=theano_mode)
+          
+        if more_func_test is not None:
+          if type(more_func_test) is not list:
+            more_func_test = [more_func_test] 
+            
+          self._test = theano.function(test_ins, [test_loss] + more_func_test,
+                                     allow_input_downcast=True, mode=theano_mode)
+        else:
+          self._test = theano.function(test_ins, test_loss,
                                      allow_input_downcast=True, mode=theano_mode)
         self._predict = theano.function(inputs=ins, outputs=ys_test,
                                         allow_input_downcast=True, mode=theano_mode)
@@ -719,8 +757,11 @@ class Graph(Model, containers.Graph):
 
         f = self._train
         out_labels = ['loss']
-        metrics = ['loss', 'val_loss']
+        metrics = ['loss', 'val_loss', 'lr']
 
+        if self._more_output_labels is not None:
+            out_labels += self._more_output_labels
+            
         sample_weight_list = [standardize_weights(y[i],
                                                   sample_weight=sample_weight_list[i],
                                                   class_weight=class_weight_list[i]) for i in range(len(self.output_order))]
