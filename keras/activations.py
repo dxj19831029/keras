@@ -17,7 +17,10 @@ def softplus(x):
 
 
 def relu(x):
-    return T.nnet.relu(x)
+    if hasattr(T.nnet, 'relu'):
+      return T.nnet.relu(x)
+    else:
+      return (x + abs(x)) / 2.0
 
 
 def tanh(x):
