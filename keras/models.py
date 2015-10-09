@@ -79,6 +79,23 @@ def weighted_objective(fn):
             return weighted.sum() / (filtered_mask * filtered_weights).sum()
     return weighted
 
+def weighted_multi_objective(fn):
+    def weighted(y_true, y_pred, weights, mask=None):
+        # it's important that 0 * Inf == 0, not NaN, so we need to filter
+        # those out first
+        filtered_y_true = y_true[weights.nonzero()[:-1]]
+        filtered_y_pred = y_pred[weights.nonzero()[:-1]]
+        filtered_weights = weights[weights.nonzero()]
+        obj_output = fn(filtered_y_true, filtered_y_pred)
+        weighted = filtered_weights.reshape((filtered_weights.shape[0]/3,3)).mean(-1) * obj_output
+        if mask is None:
+            # Instead of calling mean() here, we divide by the sum of filtered_weights.
+            return weighted.sum() / filtered_weights.sum()
+        else:
+            filtered_mask = mask[weights.nonzero()[:-1]]
+            return weighted.sum() / (filtered_mask * filtered_weights).sum()
+    return weighted
+
 
 def standardize_weights(y, sample_weight=None, class_weight=None):
     if sample_weight is not None:
@@ -622,7 +639,7 @@ class Sequential(Model, containers.Sequential):
 
 
 class Graph(Model, containers.Graph):
-    def compile(self, optimizer, loss, theano_mode=None, other_func_init=None):
+    def compile(self, optimizer, loss, theano_mode=None, other_func_init=None, weighted_method=None):
         # loss is a dictionary mapping output name to loss functions
         ys = []
         ys_train = []
@@ -647,7 +664,11 @@ class Graph(Model, containers.Graph):
 
             weight = T.ones_like(y_test)
             weights.append(weight)
-            weighted_loss = weighted_objective(objectives.get(loss_fn))
+            
+            if weighted_method is not None and weighted_method == "multi":
+                weighted_loss = weighted_multi_objective(objectives.get(loss_fn))
+            else:
+                weighted_loss = weighted_objective(objectives.get(loss_fn))
             train_loss += weighted_loss(y, y_train, weight, mask)
             test_loss += weighted_loss(y, y_test, weight, mask)
 
@@ -655,8 +676,12 @@ class Graph(Model, containers.Graph):
         test_loss.name = 'test_loss'
 
         ins = [self.inputs[name].input for name in self.input_order]
-        train_ins = ins + ys + weights
-        test_ins = ins + ys + weights
+        if len(weights) > 0: 
+            train_ins = ins + ys + weights
+            test_ins = ins + ys + weights
+        else:
+            train_ins = ins + ys
+            test_ins = ins + ys
 
         for r in self.regularizers:
             train_loss = r(train_loss)
