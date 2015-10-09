@@ -407,9 +407,10 @@ class Sequential(Model, containers.Sequential):
         more_func_train = None
         more_func_test = None
         self._more_output_labels = None
-        more_func_train = [T.abs_(self.optimizer.lr * (1.0 / (1.0 + self.optimizer.decay * self.optimizer.iterations)))]
-        more_func_test = [T.abs_(self.optimizer.lr * (1.0 / (1.0 + self.optimizer.decay * self.optimizer.iterations)))]             
-        self._more_output_labels = ['lr']
+        if hasattr(self.optimizer, "decay"):
+          more_func_train = [T.abs_(self.optimizer.lr * (1.0 / (1.0 + self.optimizer.decay * self.optimizer.iterations)))]
+          more_func_test = [T.abs_(self.optimizer.lr * (1.0 / (1.0 + self.optimizer.decay * self.optimizer.iterations)))]             
+          self._more_output_labels = ['lr']
         
         if other_func_init is not None:
           if more_func_train is not None:
@@ -668,9 +669,10 @@ class Graph(Model, containers.Graph):
         more_func_train = None
         more_func_test = None
         self._more_output_labels = None
-        more_func_train = [T.abs_(self.optimizer.lr * (1.0 / (1.0 + self.optimizer.decay * self.optimizer.iterations)))]
-        more_func_test = [T.abs_(self.optimizer.lr * (1.0 / (1.0 + self.optimizer.decay * self.optimizer.iterations)))]             
-        self._more_output_labels = ['lr']
+        if hasattr(self.optimizer, "decay"):
+          more_func_train = [T.abs_(self.optimizer.lr * (1.0 / (1.0 + self.optimizer.decay * self.optimizer.iterations)))]
+          more_func_test = [T.abs_(self.optimizer.lr * (1.0 / (1.0 + self.optimizer.decay * self.optimizer.iterations)))]             
+          self._more_output_labels = ['lr']
         
         if other_func_init is not None:
           if more_func_train is not None:
